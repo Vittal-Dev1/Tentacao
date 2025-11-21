@@ -22,10 +22,34 @@ if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify([]));
 }
 
+// Helper to read and normalize DB data
+function readDb(): MediaItem[] {
+    try {
+        if (!fs.existsSync(DB_PATH)) {
+            return [];
+        }
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        const parsed = JSON.parse(data);
+
+        if (Array.isArray(parsed)) {
+            return parsed;
+        }
+
+        // Handle legacy format { items: [] }
+        if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)) {
+            return parsed.items;
+        }
+
+        return [];
+    } catch (error) {
+        console.error("Error reading DB:", error);
+        return [];
+    }
+}
+
 export const db = {
     async getItems(category?: string): Promise<MediaItem[]> {
-        const data = fs.readFileSync(DB_PATH, "utf-8");
-        const items: MediaItem[] = JSON.parse(data);
+        const items = readDb();
 
         let filtered = items;
         if (category) {
@@ -39,8 +63,7 @@ export const db = {
     },
 
     async addItem(item: MediaItem): Promise<MediaItem> {
-        const data = fs.readFileSync(DB_PATH, "utf-8");
-        const items: MediaItem[] = JSON.parse(data);
+        const items = readDb();
 
         items.push(item);
         fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
@@ -49,16 +72,14 @@ export const db = {
     },
 
     async deleteItem(id: string): Promise<void> {
-        const data = fs.readFileSync(DB_PATH, "utf-8");
-        let items: MediaItem[] = JSON.parse(data);
+        let items = readDb();
 
         items = items.filter((item) => item.id !== id);
         fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
     },
 
     async deleteItems(ids: string[]): Promise<void> {
-        const data = fs.readFileSync(DB_PATH, "utf-8");
-        let items: MediaItem[] = JSON.parse(data);
+        let items = readDb();
 
         items = items.filter((item) => !ids.includes(item.id));
         fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
@@ -68,8 +89,7 @@ export const db = {
         id: string,
         updates: Partial<MediaItem>
     ): Promise<MediaItem | null> {
-        const data = fs.readFileSync(DB_PATH, "utf-8");
-        const items: MediaItem[] = JSON.parse(data);
+        const items = readDb();
 
         const index = items.findIndex((item) => item.id === id);
         if (index === -1) return null;
@@ -81,8 +101,7 @@ export const db = {
     },
 
     async getItemById(id: string): Promise<MediaItem | null> {
-        const data = fs.readFileSync(DB_PATH, "utf-8");
-        const items: MediaItem[] = JSON.parse(data);
+        const items = readDb();
 
         return items.find((item) => item.id === id) || null;
     },
