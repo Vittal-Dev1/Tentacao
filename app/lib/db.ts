@@ -1,5 +1,8 @@
 // app/lib/db.ts
-import { sql } from "@vercel/postgres";
+import fs from "fs";
+import path from "path";
+
+const DB_PATH = path.join(process.cwd(), "data", "db.json");
 
 export type MediaItem = {
     id: string;
@@ -9,98 +12,83 @@ export type MediaItem = {
     created_at: string;
 };
 
+// Ensure data directory exists
+if (!fs.existsSync(path.dirname(DB_PATH))) {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
+
+// Ensure db file exists
+if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify([]));
+}
+
 export const db = {
     async getItems(category?: string): Promise<MediaItem[]> {
-        try {
-            if (category) {
-                const { rows } = await sql<MediaItem>`
-          SELECT * FROM media_items 
-          WHERE category = ${category}
-          ORDER BY created_at DESC
-        `;
-                return rows;
-            } else {
-                const { rows } = await sql<MediaItem>`
-          SELECT * FROM media_items 
-          ORDER BY created_at DESC
-        `;
-                return rows;
-            }
-        } catch (error) {
-            console.error("Error fetching items:", error);
-            return [];
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        const items: MediaItem[] = JSON.parse(data);
+
+        let filtered = items;
+        if (category) {
+            filtered = items.filter((item) => item.category === category);
         }
+
+        // Sort by created_at DESC
+        return filtered.sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
     },
 
     async addItem(item: MediaItem): Promise<MediaItem> {
-        const { rows } = await sql<MediaItem>`
-      INSERT INTO media_items (id, category, description, image_url, created_at)
-      VALUES (${item.id}, ${item.category}, ${item.description || null}, ${item.image_url}, ${item.created_at})
-      RETURNING *
-    `;
-        return rows[0];
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        const items: MediaItem[] = JSON.parse(data);
+
+        items.push(item);
+        fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
+
+        return item;
     },
 
     async deleteItem(id: string): Promise<void> {
-        await sql`DELETE FROM media_items WHERE id = ${id}`;
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        let items: MediaItem[] = JSON.parse(data);
+
+        items = items.filter((item) => item.id !== id);
+        fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
     },
 
     async deleteItems(ids: string[]): Promise<void> {
-        if (ids.length === 0) return;
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        let items: MediaItem[] = JSON.parse(data);
 
-        // Delete each item individually
-        for (const id of ids) {
-            await sql`DELETE FROM media_items WHERE id = ${id}`;
-        }
+        items = items.filter((item) => !ids.includes(item.id));
+        fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
     },
 
     async updateItem(
         id: string,
         updates: Partial<MediaItem>
     ): Promise<MediaItem | null> {
-        const { description } = updates;
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        const items: MediaItem[] = JSON.parse(data);
 
-        const { rows } = await sql<MediaItem>`
-      UPDATE media_items 
-      SET description = ${description || null}
-      WHERE id = ${id}
-      RETURNING *
-    `;
+        const index = items.findIndex((item) => item.id === id);
+        if (index === -1) return null;
 
-        return rows[0] || null;
+        items[index] = { ...items[index], ...updates };
+        fs.writeFileSync(DB_PATH, JSON.stringify(items, null, 2));
+
+        return items[index];
     },
 
     async getItemById(id: string): Promise<MediaItem | null> {
-        const { rows } = await sql<MediaItem>`
-      SELECT * FROM media_items WHERE id = ${id}
-    `;
-        return rows[0] || null;
+        const data = fs.readFileSync(DB_PATH, "utf-8");
+        const items: MediaItem[] = JSON.parse(data);
+
+        return items.find((item) => item.id === id) || null;
     },
 
-    // Initialize database (create table if not exists)
+    // Mock init for compatibility
     async init(): Promise<void> {
-        try {
-            await sql`
-        CREATE TABLE IF NOT EXISTS media_items (
-          id TEXT PRIMARY KEY,
-          category TEXT NOT NULL CHECK (category IN ('CARDAPIO', 'COMBO_DIA', 'COMBO_TARDE')),
-          description TEXT,
-          image_url TEXT NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        )
-      `;
-
-            await sql`
-        CREATE INDEX IF NOT EXISTS idx_media_category ON media_items(category)
-      `;
-
-            await sql`
-        CREATE INDEX IF NOT EXISTS idx_media_created_at ON media_items(created_at DESC)
-      `;
-
-            console.log("Database initialized successfully");
-        } catch (error) {
-            console.error("Error initializing database:", error);
-        }
-    },
+        return Promise.resolve();
+    }
 };

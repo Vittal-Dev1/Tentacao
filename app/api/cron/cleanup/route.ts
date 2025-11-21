@@ -1,6 +1,7 @@
 // app/api/cron/cleanup/route.ts
 import { NextResponse } from "next/server";
-import { del } from "@vercel/blob";
+import { unlink } from "fs/promises";
+import path from "path";
 import { db } from "@/app/lib/db";
 
 export const runtime = "nodejs";
@@ -22,13 +23,18 @@ export async function GET() {
 
         console.log(`Deletando ${allComboItems.length} combos...`);
 
-        // Delete from Blob storage
+        // Delete from filesystem
         for (const item of allComboItems) {
             try {
-                await del(item.image_url);
+                const relativePath = item.image_url.startsWith("/")
+                    ? item.image_url.slice(1)
+                    : item.image_url;
+
+                const filePath = path.join(process.cwd(), "public", relativePath);
+                await unlink(filePath);
             } catch (err) {
-                console.error(`Erro ao deletar blob ${item.image_url}:`, err);
-                // Continue even if blob deletion fails
+                console.error(`Erro ao deletar arquivo ${item.image_url}:`, err);
+                // Continue even if file deletion fails
             }
         }
 

@@ -43,9 +43,11 @@ export async function GET(
         const latestItem = items[0];
 
         // Redirect to the image URL
-        const url = new URL(latestItem.image_url);
+        const imageUrl = latestItem.image_url.startsWith("http")
+            ? latestItem.image_url
+            : `${req.nextUrl.origin}${latestItem.image_url}`;
 
-        return NextResponse.redirect(url);
+        return NextResponse.redirect(imageUrl);
     } catch (err) {
         console.error("Erro ao buscar imagem recente:", err);
         return NextResponse.json(

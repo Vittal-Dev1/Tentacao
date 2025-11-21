@@ -1,6 +1,7 @@
 // app/api/media/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { del } from "@vercel/blob";
+import { unlink } from "fs/promises";
+import path from "path";
 import { db } from "@/app/lib/db";
 
 export const runtime = "nodejs";
@@ -12,7 +13,7 @@ export async function DELETE(
     try {
         const { id } = await params;
 
-        // Get item to find blob URL
+        // Get item to find file path
         const item = await db.getItemById(id);
 
         if (!item) {
@@ -22,12 +23,18 @@ export async function DELETE(
             );
         }
 
-        // Delete from Blob storage
+        // Delete from filesystem
         try {
-            await del(item.image_url);
+            // Assuming image_url is like /uploads/cardapio/filename.jpg
+            const relativePath = item.image_url.startsWith("/")
+                ? item.image_url.slice(1)
+                : item.image_url;
+
+            const filePath = path.join(process.cwd(), "public", relativePath);
+            await unlink(filePath);
         } catch (err) {
-            console.error("Erro ao deletar blob:", err);
-            // Continue even if blob deletion fails
+            console.error("Erro ao deletar arquivo:", err);
+            // Continue even if file deletion fails (maybe already deleted)
         }
 
         // Delete from database
